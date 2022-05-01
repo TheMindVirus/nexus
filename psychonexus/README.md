@@ -12,3 +12,4 @@ https://github.com/TheMindVirus/nexus/blob/0e1467271d9cf63d89aae24534820a190de6e
 ![screenshot4](/psychonexus/screenshot4.png)
 ![screenshot5](/psychonexus/screenshot5.png)
 ![screenshot6](/psychonexus/screenshot6.png)
+![screenshot7](/psychonexus/screenshot7.png)
