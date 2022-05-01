@@ -1,6 +1,8 @@
 # nexus
 
 ### Demo: https://themindvirus.github.io/nexus
+### Demo (mobile): https://themindvirus.github.io/nexus/mobile
+### Mobile VR Controls: https://github.com/TheMindVirus/nexus/tree/main/mobile
 
 ### 3D Web Gallery of Images that refresh every minute - Powered by Unity WebGL Player
 
