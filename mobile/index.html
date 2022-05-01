@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="Viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta name="Apple-Mobile-Web-App-Capable" content="yes">
+    <title>Unity WebGL Player | Nexus Mobile</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css">
+    <script src="./Build/Output.loader.js"></script>
+    <script>
+var container = null;
+var canvas = null;
+var controls = null;
+var loadingBar = null;
+var progressBarFull = null;
+
+var buildUrl = null;
+var loaderUrl = null;
+var config = null;
+
+var leftStick = null;
+var rightStick = null;
+
+var instance = null;
+var panels = 18;
+var loadout = 4; //parseInt(panels / 2);
+
+var ViewX = 0.0;
+var ViewY = 0.0;
+var ViewZ = 0.0;
+var DirectionX = 0.0;
+var DirectionY = 0.0;
+var DirectionZ = 0.0;
+var Floor = 1.0;
+var FOV = 60.0;
+
+var Light1 = '{ "index": 1, "r": 0.0, "g": 0.0, "b": 1.0, "a": 1.0 }';
+var Light2 = '{ "index": 0, "r": 0.0, "g": 0.0, "b": 1.0, "a": 1.0 }';
+
+var play = function(element)
+{
+    element.remove();
+    container = document.querySelector("#unity-container");
+    canvas = document.querySelector("#unity-canvas");
+    controls = document.querySelector("#unity-control-overlay");
+    loadingBar = document.querySelector("#unity-loading-bar");
+    progressBarFull = document.querySelector("#unity-progress-bar-full");
+
+    buildUrl = "Build";
+    loaderUrl = buildUrl + "/Output.loader.js";
+    config =
+    {
+        dataUrl: buildUrl + "/Output.data.unityweb",
+        frameworkUrl: buildUrl + "/Output.framework.js.unityweb",
+        codeUrl: buildUrl + "/Output.wasm.unityweb",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "TheMindVirus",
+        productName: "NexusMobile",
+        productVersion: "1.1",
+    };
+
+    canvas.style.width = "100vw";
+    canvas.style.height = "100vh";
+    canvas.ondragstart = function(event) { event.preventDefault(); }
+
+    loadingBar.style.display = "block";
+    leftStick = document.querySelector("#unity-control-left-stick");
+    rightStick = document.querySelector("#unity-control-right-stick");
+
+    createUnityInstance(canvas, config, (progress) =>
+    {
+        progressBarFull.style.width = 100 * progress + "%";
+    }).then((unityInstance) =>
+    {
+        instance = unityInstance;
+        loadingBar.style.display = "none";
+        leftStick.ontouchstart = leftStickTouchStart;
+        rightStick.ontouchstart = rightStickTouchStart;
+        leftStick.ontouchmove = leftStickTouchMove;
+        rightStick.ontouchmove = rightStickTouchMove;
+        leftStick.ontouchend = leftStickTouchEnd;
+        rightStick.ontouchend = rightStickTouchEnd;
+        leftStick.ontouchcancel = leftStickTouchCancel;
+        rightStick.ontouchcancel = rightStickTouchCancel;
+        leftStick.onmousedown = leftStickMouseDown;
+        rightStick.onmousedown = rightStickMouseDown;
+        leftStick.onmousemove = leftStickMouseMove;
+        rightStick.onmousemove = rightStickMouseMove;
+        leftStick.onmouseup = leftStickMouseUp;
+        rightStick.onmouseup = rightStickMouseUp;
+        leftStick.onmouseout = leftStickMouseOut;
+        rightStick.onmouseout = rightStickMouseOut;
+        setTimeout(() => { controls.style.display = "block"; }, 3000);
+        instance.SendMessage("Nexus", "SetLightData", Light1);
+        instance.SendMessage("Nexus", "SetLightData", Light2);
+        instance.SendMessage("Player", "SetFloor", Floor);
+        instance.SendMessage("Player", "SetFOV", FOV);
+        paint(4); //paint(panels, false); //Initial Load-In looks a bit blank
+        setInterval(() => { paint(); }, 60000);
+        setInterval(() => { update(); }, 1);
+    }).catch((message) => { alert(message); });
+}
+
+var paint =(load = loadout, randomPanel = true, randomIndex = true)=>
+{
+    var xmlhttp = new XMLHttpRequest();
+    xmlhttp.open("GET", "img/index.txt", true);
+    xmlhttp.onreadystatechange =()=>
+    {
+        if ((xmlhttp.readyState == 4) && (xmlhttp.status == 200))
+        {
+            var links = xmlhttp.responseText.replace("\r", "\n").split("\n");
+            for (var i = 0; i < load; ++i)
+            {
+                var panel = i;
+                var index = i;
+                if (randomPanel) { panel = parseInt(Math.random() * panels); }
+                if (randomIndex) { index = parseInt(Math.random() * links.length); }
+                download(links[index], panel);
+            }
+        }
+    }
+    xmlhttp.send();
+}
+
+var download =(link, panel)=>
+{
+    var img = new Image();
+    img.onload =()=>
+    {
+        var stage = document.querySelector("#staging-canvas");
+        var staging = stage.getContext("2d");
+        stage.width = parseFloat(img.width);
+        stage.height = parseFloat(img.height);
+        staging.drawImage(img, 0, 0, img.width, img.height);
+        var data = stage.toDataURL();
+        var json = '{"panel": ' + panel + ', "data": "' + data + '"}';
+        instance.SendMessage("Nexus", "SetPanelData", json);
+    }
+    img.src = link;
+}
+
+var update =()=>
+{
+    instance.SendMessage("Player", "SetViewX", ViewX);
+    instance.SendMessage("Player", "SetViewY", ViewY);
+    instance.SendMessage("Player", "SetViewZ", ViewZ);
+    instance.SendMessage("Player", "SetDirectionX", DirectionX);
+    instance.SendMessage("Player", "SetDirectionY", DirectionY);
+    instance.SendMessage("Player", "SetDirectionZ", DirectionZ);
+    instance.SendMessage("Player", "UpdateMovement");
+}
+
+var leftStickTouchDrag = false;
+var leftStickTouchStart =(event)=> { leftStickTouchDrag = true; console.log("Touch Start Left"); }
+var leftStickTouchMove =(event)=>
+{
+    if (!leftStickTouchDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.touches[0].clientX - rect.left - (rect.width / 2.0);
+    var y = event.touches[0].clientY - rect.top - (rect.height / 2.0); y *= -1.0;
+    var s = 0.001;
+    DirectionX = s*x; DirectionY = 0.0; DirectionZ = s*y;
+    console.log("Touch Move Left " + x + " " + y);
+}
+var leftStickTouchEnd =(event)=> { leftStickTouchDrag = false; console.log("Touch End Left");
+    DirectionX = 0.0; DirectionY = 0.0; DirectionZ = 0.0; }
+var leftStickTouchCancel =(event)=> { leftStickTouchDrag = false; console.log("Touch Cancel Left");
+    DirectionX = 0.0; DirectionY = 0.0; DirectionZ = 0.0; }
+
+var rightStickTouchDrag = false;
+var rightStickTouchStart =(event)=> { rightStickTouchDrag = true; console.log("Touch Start Right"); }
+var rightStickTouchMove =(event)=>
+{
+    if (!rightStickTouchDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.touches[0].clientX - rect.left - (rect.width / 2.0);
+    var y = event.touches[0].clientY - rect.top - (rect.height / 2.0); y *= -1.0;
+    var s = 0.01;
+    ViewX = -s*y; ViewY = s*x; ViewZ = 0.0;
+    console.log("Touch Move Right " + x + " " + y);
+}
+var rightStickTouchEnd =(event)=> { rightStickTouchDrag = false; console.log("Touch End Right");
+    ViewX = 0.0; ViewY = 0.0; ViewZ = 0.0; }
+var rightStickTouchCancel =(event)=> { rightStickTouchDrag = false; console.log("Touch Cancel Right");
+    ViewX = 0.0; ViewY = 0.0; ViewZ = 0.0; }
+
+var leftStickMouseDrag = false;
+var leftStickMouseDown =(event)=> { leftStickMouseDrag = true; console.log("Mouse Down Left"); }
+var leftStickMouseMove =(event)=>
+{
+    if (!leftStickMouseDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.x - rect.left - (rect.width / 2.0);
+    var y = event.y - rect.top - (rect.height / 2.0);
+    var s = 0.001;
+    DirectionX = s*x; DirectionY = 0.0; DirectionZ = -s*y;
+    console.log("Mouse Move Left " + x + ", " + y);
+}
+var leftStickMouseUp =(event)=> { leftStickMouseDrag = false; console.log("Mouse Up Left");
+    DirectionX = 0.0; DirectionY = 0.0; DirectionZ = 0.0; }
+var leftStickMouseOut =(event)=> { leftStickMouseDrag = false; console.log("Mouse Out Left");
+    DirectionX = 0.0; DirectionY = 0.0; DirectionZ = 0.0; }
+
+var rightStickMouseDrag = false;
+var rightStickMouseDown =(event)=> { rightStickMouseDrag = true; console.log("Mouse Down Right"); }
+var rightStickMouseMove =(event)=>
+{
+    if (!rightStickMouseDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.x - rect.left - (rect.width / 2.0);
+    var y = event.y - rect.top - (rect.height / 2.0);
+    var s = 0.01;
+    ViewX = s*y; ViewY = s*x; ViewZ = 0.0;
+    console.log("Mouse Move Right " + x + ", " + y);
+}
+var rightStickMouseUp =(event)=> { rightStickMouseDrag = false; console.log("Mouse Up Right");
+    ViewX = 0.0; ViewY = 0.0; ViewZ = 0.0; }
+var rightStickMouseOut =(event)=> { rightStickMouseDrag = false; console.log("Mouse Out Right");
+    ViewX = 0.0; ViewY = 0.0; ViewZ = 0.0; }
+
+    </script>
+    <style>
+* { margin: auto; text-align: center; overflow: hidden; }
+body { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; }
+.webgl-content { position: absolute; top: 0 left: 0; width: 100%; height: 100%; text-shadow: 1px 1px 10px white; }
+.unityContainer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.footer { position: absolute; top: 0; width: 100%; height: 30px; background-color: cyan; box-shadow: 1px 1px 10px black; opacity: 0.5; }
+.webgl-logo { position: relative; top: 0; left: 0; background-color: white; z-index: 9999; }
+.fullscreen { position: relative; top: 0; right: 0; }
+.title { position: relative; bottom: 0; font-weight: bold; }
+#unity-play-button { position: fixed; top: 0; left: 0; width: 100%; height: 100%; text-align: center; color: blue; background: black; border: none; font-size: 100pt; user-select: none; z-index: 9999; }
+#unity-control-overlay { background: #00000000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9998; display: none; }
+#unity-control-left-thumb { background: #FFFFFF7F; position: fixed; top: calc(15vh - 5vmin); left: calc(10vw - 5vmin); width: 10vmin; height: 10vmin; border-radius: 100vmin; background: #FFFFFF7F; user-select: none; }
+#unity-control-right-thumb { background: #FFFFFF7F; position: fixed; top: calc(15vh - 5vmin); left: calc(90vw - 5vmin); width: 10vmin; height: 10vmin; border-radius: 100vmin; background: #FFFFFF7F; user-select: none; }
+#unity-control-left-stick { background: #0000003F; position: fixed; top: calc(15vh - 10vmin); left: calc(10vw - 10vmin); width: 20vmin; height: 20vmin; border-radius: 100vmin; border: 1px #FFFFFF3F solid; }
+#unity-control-right-stick { background: #0000003F; position: fixed; top: calc(15vh - 10vmin); left: calc(90vw - 10vmin); width: 20vmin; height: 20vmin; border-radius: 100vmin; border: 1px #FFFFFF3F solid; }
+    </style>
+  </head>
+  <body>
+    <button id="unity-play-button" onclick="play(this);">Play</button>
+    <div id="unity-container" class="unity-desktop">
+      <canvas id="unity-canvas" width="100%" height="100%"></canvas>
+      <canvas id="staging-canvas" hidden></canvas>
+      <div id="unity-control-overlay">
+        <div id="unity-control-left-thumb"></div>
+        <div id="unity-control-right-thumb"></div>
+        <div id="unity-control-left-stick"></div>
+        <div id="unity-control-right-stick"></div>
+      </div>
+      <div id="unity-loading-bar">
+        <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
