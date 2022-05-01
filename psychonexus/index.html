@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="Viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta name="Apple-Mobile-Web-App-Capable" content="yes">
+    <title>Unity WebGL Player | PsychoNexus</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css">
+    <script src="./Build/Output.loader.js"></script>
+    <script>
+var container = null;
+var canvas = null;
+var controls = null;
+var loadingBar = null;
+var progressBarFull = null;
+
+var buildUrl = null;
+var loaderUrl = null;
+var config = null;
+var instance = null;
+var audio = null;
+
+var leftStick = null;
+var rightStick = null;
+var keySelect = null;
+var keyBack = null;
+var keyJump = null;
+
+var ViewX = 0.0;
+var ViewY = 0.0;
+var DirectionX = 0.0;
+var DirectionY = 0.0;
+var KeySelect = 0.0;
+var KeyBack = 0.0;
+var KeyJump = 0.0;
+
+var VX = 0.0;
+var VY = 0.0;
+var DX = 0.0;
+var DY = 0.0;
+var KBack = 0.0;
+var KJump = 0.0;
+var KSelect = 0.0;
+
+var play = function(element)
+{
+    element.remove();
+    container = document.querySelector("#unity-container");
+    canvas = document.querySelector("#unity-canvas");
+    controls = document.querySelector("#unity-control-overlay");
+    loadingBar = document.querySelector("#unity-loading-bar");
+    progressBarFull = document.querySelector("#unity-progress-bar-full");
+
+    buildUrl = "Build";
+    loaderUrl = buildUrl + "/Output.loader.js";
+    config =
+    {
+        dataUrl: buildUrl + "/Output.data.unityweb",
+        frameworkUrl: buildUrl + "/Output.framework.js.unityweb",
+        codeUrl: buildUrl + "/Output.wasm.unityweb",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "TheMindVirus",
+        productName: "PsychoNexus",
+        productVersion: "1.1",
+    };
+
+    canvas.style.width = "100vw";
+    canvas.style.height = "100vh";
+    canvas.ondragstart = function(event) { event.preventDefault(); }
+
+    loadingBar.style.display = "block";
+    leftStick = document.querySelector("#unity-control-left-stick");
+    rightStick = document.querySelector("#unity-control-right-stick");
+    keySelect = document.querySelector("#unity-control-key-select");
+    keyBack = document.querySelector("#unity-control-key-back");
+    keyJump = document.querySelector("#unity-control-key-jump");
+
+    createUnityInstance(canvas, config, (progress) =>
+    {
+        progressBarFull.style.width = 100 * progress + "%";
+    }).then((unityInstance) =>
+    {
+        loadingBar.style.display = "none";
+        instance = unityInstance;
+        audio = document.getElementsByTagName("audio")[0];
+        audio.volume = 0.8; //0.75;
+        audio.play();
+        hookControls();
+        setTimeout(() => { controls.style.display = "block"; }, 3000);
+        setInterval(() => { update(); }, 1);
+    }).catch((message) => { alert(message); });
+}
+
+var hookControls =()=>
+{
+    leftStick.ontouchstart = leftStickTouchStart;
+    leftStick.ontouchmove = leftStickTouchMove;
+    leftStick.ontouchend = leftStickTouchEnd;
+    leftStick.ontouchcancel = leftStickTouchCancel;
+    leftStick.onmousedown = leftStickMouseDown;
+    leftStick.onmousemove = leftStickMouseMove;
+    leftStick.onmouseup = leftStickMouseUp;
+    leftStick.onmouseout = leftStickMouseOut;
+
+    rightStick.ontouchstart = rightStickTouchStart;
+    rightStick.ontouchmove = rightStickTouchMove;
+    rightStick.ontouchend = rightStickTouchEnd;
+    rightStick.ontouchcancel = rightStickTouchCancel;
+    rightStick.onmousedown = rightStickMouseDown;
+    rightStick.onmousemove = rightStickMouseMove;
+    rightStick.onmouseup = rightStickMouseUp;
+    rightStick.onmouseout = rightStickMouseOut;
+
+    keySelect.ontouchstart = keySelectTouchStart;
+    keySelect.ontouchend = keySelectTouchEnd;
+    keySelect.ontouchcancel = keySelectTouchCancel;
+    keySelect.onmousedown = keySelectMouseDown;
+    keySelect.onmouseup = keySelectMouseUp;
+    keySelect.onmouseout = keySelectMouseOut;
+
+    keyBack.ontouchstart = keyBackTouchStart;
+    keyBack.ontouchend = keyBackTouchEnd;
+    keyBack.ontouchcancel = keyBackTouchCancel;
+    keyBack.onmousedown = keyBackMouseDown;
+    keyBack.onmouseup = keyBackMouseUp;
+    keyBack.onmouseout = keyBackMouseOut;
+
+    keyJump.ontouchstart = keyJumpTouchStart;
+    keyJump.ontouchend = keyJumpTouchEnd;
+    keyJump.ontouchcancel = keyJumpTouchCancel;
+    keyJump.onmousedown = keyJumpMouseDown;
+    keyJump.onmouseup = keyJumpMouseUp;
+    keyJump.onmouseout = keyJumpMouseOut;
+}
+
+var gamepadsPrevious = [];
+var pollGamepads =()=>
+{
+    var gamepads = navigator.getGamepads ? navigator.getGamepads()
+                 : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads : []);
+    for (var i = 0; i < gamepads.length; ++i)
+    {
+        if (gamepads[i])
+        {
+            if (!gamepadsPrevious[i]) { gamepadsPrevious[i] = gamepads[i]; }
+            var id = "(" + gamepads[i].index + ": " + gamepads[i].id + ")";
+    
+            if (gamepads[i].axes.length > 0)
+            {
+                var dz = 0.5; //DeadZone
+                var ds = 0.5; //Sensitivity
+                DX = (gamepads[i].axes[0] > dz) ? ds : ((gamepads[i].axes[0] < -dz) ? -ds : 0.0);
+                DY = (gamepads[i].axes[1] > dz) ? ds : ((gamepads[i].axes[1] < -dz) ? -ds : 0.0);
+                VX = (gamepads[i].axes[2] > dz) ? ds : ((gamepads[i].axes[2] < -dz) ? -ds : 0.0);
+                VY = (gamepads[i].axes[3] > dz) ? ds : ((gamepads[i].axes[3] < -dz) ? -ds : 0.0);
+            }
+            if (gamepads[i].buttons.length > 0)
+            {
+                if (((gamepads[i].buttons[1].pressed) && (!gamepadsPrevious[i].buttons[1].pressed))
+                ||  ((gamepads[i].buttons[8].pressed) && (!gamepadsPrevious[i].buttons[8].pressed)))
+                { KBack = 1.0; console.log("[INFO]: Gamepad Pressed Back " + id); }
+                else
+                if (((!gamepads[i].buttons[1].pressed) && (gamepadsPrevious[i].buttons[1].pressed))
+                ||  ((!gamepads[i].buttons[8].pressed) && (gamepadsPrevious[i].buttons[8].pressed)))
+                { KBack = 0.0; console.log("[INFO]: Gamepad Released Back " + id); }
+
+                if (((gamepads[i].buttons[0].pressed) && (!gamepadsPrevious[i].buttons[0].pressed))
+                ||  ((gamepads[i].buttons[2].pressed) && (!gamepadsPrevious[i].buttons[2].pressed))
+                ||  ((gamepads[i].buttons[6].pressed) && (!gamepadsPrevious[i].buttons[6].pressed)))
+                { KJump = 1.0; console.log("[INFO]: Gamepad Pressed Jump " + id); }
+                else
+                if (((!gamepads[i].buttons[0].pressed) && (gamepadsPrevious[i].buttons[0].pressed))
+                ||  ((!gamepads[i].buttons[2].pressed) && (gamepadsPrevious[i].buttons[2].pressed))
+                ||  ((!gamepads[i].buttons[6].pressed) && (gamepadsPrevious[i].buttons[6].pressed)))
+                { KJump = 0.0; console.log("[INFO]: Gamepad Released Jump " + id); }
+                
+                if (((gamepads[i].buttons[3].pressed) && (!gamepadsPrevious[i].buttons[3].pressed))
+                ||  ((gamepads[i].buttons[7].pressed) && (!gamepadsPrevious[i].buttons[7].pressed))
+                ||  ((gamepads[i].buttons[9].pressed) && (!gamepadsPrevious[i].buttons[9].pressed)))
+                { KSelect = 1.0; console.log("[INFO]: Gamepad Pressed Select " + id); }
+                else
+                if (((!gamepads[i].buttons[3].pressed) && (gamepadsPrevious[i].buttons[3].pressed))
+                ||  ((!gamepads[i].buttons[7].pressed) && (gamepadsPrevious[i].buttons[7].pressed))
+                ||  ((!gamepads[i].buttons[9].pressed) && (gamepadsPrevious[i].buttons[9].pressed)))
+                { KSelect = 0.0; console.log("[INFO]: Gamepad Released Select " + id); }
+            }
+            gamepadsPrevious[i] = gamepads[i];
+        }
+    }
+}
+
+var leftStickTouchDrag = false;
+var leftStickTouchStart =(event)=> { leftStickTouchDrag = true; console.log("[INFO]: Touch Start Left"); }
+var leftStickTouchMove =(event)=>
+{
+    if (!leftStickTouchDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.touches[0].clientX - rect.left - (rect.width / 2.0);
+    var y = event.touches[0].clientY - rect.top - (rect.height / 2.0); y *= -1.0;
+    var s = 0.01;
+    DirectionX = s*x; DirectionY = s*y;
+    console.log("[INFO]: Touch Move Left " + x + " " + y);
+}
+var leftStickTouchEnd =(event)=> { leftStickTouchDrag = false; console.log("[INFO]: Touch End Left");
+    DirectionX = 0.0; DirectionY = 0.0; }
+var leftStickTouchCancel =(event)=> { leftStickTouchDrag = false; console.log("[INFO]: Touch Cancel Left");
+    DirectionX = 0.0; DirectionY = 0.0; }
+
+var rightStickTouchDrag = false;
+var rightStickTouchStart =(event)=> { rightStickTouchDrag = true; console.log("[INFO]: Touch Start Right"); }
+var rightStickTouchMove =(event)=>
+{
+    if (!rightStickTouchDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.touches[0].clientX - rect.left - (rect.width / 2.0);
+    var y = event.touches[0].clientY - rect.top - (rect.height / 2.0); y *= -1.0;
+    var s = 0.01;
+    ViewX = s*x; ViewY = s*y;
+    console.log("[INFO]: Touch Move Right " + x + " " + y);
+}
+var rightStickTouchEnd =(event)=> { rightStickTouchDrag = false; console.log("[INFO]: Touch End Right");
+    ViewX = 0.0; ViewY = 0.0; }
+var rightStickTouchCancel =(event)=> { rightStickTouchDrag = false; console.log("[INFO]: Touch Cancel Right");
+    ViewX = 0.0; ViewY = 0.0; }
+
+var leftStickMouseDrag = false;
+var leftStickMouseDown =(event)=> { leftStickMouseDrag = true; console.log("[INFO]: Mouse Down Left"); }
+var leftStickMouseMove =(event)=>
+{
+    if (!leftStickMouseDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.x - rect.left - (rect.width / 2.0);
+    var y = event.y - rect.top - (rect.height / 2.0);
+    var s = 0.01;
+    DirectionX = s*x; DirectionY = s*y;
+    console.log("[INFO]: Mouse Move Left " + x + ", " + y);
+}
+var leftStickMouseUp =(event)=> { leftStickMouseDrag = false; console.log("[INFO]: Mouse Up Left");
+    DirectionX = 0.0; DirectionY = 0.0; }
+var leftStickMouseOut =(event)=> { leftStickMouseDrag = false; console.log("[INFO]: Mouse Out Left");
+    DirectionX = 0.0; DirectionY = 0.0; }
+
+var rightStickMouseDrag = false;
+var rightStickMouseDown =(event)=> { rightStickMouseDrag = true; console.log("[INFO]: Mouse Down Right"); }
+var rightStickMouseMove =(event)=>
+{
+    if (!rightStickMouseDrag) { return; }
+    var rect = event.target.getBoundingClientRect();
+    var x = event.x - rect.left - (rect.width / 2.0);
+    var y = event.y - rect.top - (rect.height / 2.0);
+    var s = 0.01;
+    ViewX = s*x; ViewY = s*y;
+    console.log("[INFO]: Mouse Move Right " + x + ", " + y);
+}
+var rightStickMouseUp =(event)=> { rightStickMouseDrag = false; console.log("[INFO]: Mouse Up Right");
+    ViewX = 0.0; ViewY = 0.0; }
+var rightStickMouseOut =(event)=> { rightStickMouseDrag = false; console.log("[INFO]: Mouse Out Right");
+    ViewX = 0.0; ViewY = 0.0; }
+
+var keySelectTouchStart =(event)=> { KeySelect = 1.0; console.log("[INFO]: Touch Start Select"); }
+var keySelectTouchEnd =(event)=> { KeySelect = 0.0; console.log("[INFO]: Touch End Select"); }
+var keySelectTouchCancel =(event)=> { KeySelect = 0.0; console.log("[INFO]: Touch Cancel Select"); }
+
+var keySelectMouseDown =(event)=> { KeySelect = 1.0; console.log("[INFO]: Mouse Down Select"); }
+var keySelectMouseUp =(event)=> { KeySelect = 0.0; console.log("[INFO]: Mouse Up Select"); }
+var keySelectMouseOut =(event)=> { KeySelect = 0.0; console.log("[INFO]: Mouse Out Select"); }
+
+var keyBackTouchStart =(event)=> { KeyBack = 1.0; console.log("[INFO]: Touch Start Back"); }
+var keyBackTouchEnd =(event)=> { KeyBack = 0.0; console.log("[INFO]: Touch End Back"); }
+var keyBackTouchCancel =(event)=> { KeyBack = 0.0; console.log("[INFO]: Touch Cancel Back"); }
+
+var keyBackMouseDown =(event)=> { KeyBack = 1.0; console.log("[INFO]: Mouse Down Back"); }
+var keyBackMouseUp =(event)=> { KeyBack = 0.0; console.log("[INFO]: Mouse Up Back"); }
+var keyBackMouseOut =(event)=> { KeyBack = 0.0; console.log("[INFO]: Mouse Out Back"); }
+
+var keyJumpTouchStart =(event)=> { KeyJump = 1.0; console.log("[INFO]: Touch Start Jump"); }
+var keyJumpTouchEnd =(event)=> { KeyJump = 0.0; console.log("[INFO]: Touch End Jump"); }
+var keyJumpTouchCancel =(event)=> { KeyJump = 0.0; console.log("[INFO]: Touch Cancel Jump"); }
+
+var keyJumpMouseDown =(event)=> { KeyJump = 1.0; console.log("[INFO]: Mouse Down Jump"); }
+var keyJumpMouseUp =(event)=> { KeyJump = 0.0; console.log("[INFO]: Mouse Up Jump"); }
+var keyJumpMouseOut =(event)=> { KeyJump = 0.0; console.log("[INFO]: Mouse Out Jump"); }
+
+var update =()=>
+{
+    instance.SendMessage("Ghost", "SetViewX", (Math.abs(ViewX) > Math.abs(VX)) ? ViewX : VX);
+    instance.SendMessage("Ghost", "SetViewY", (Math.abs(ViewY) > Math.abs(VY)) ? ViewY : VY);
+    instance.SendMessage("Ghost", "SetDirectionX", (Math.abs(DirectionX) > Math.abs(DX)) ? DirectionX : DX);
+    instance.SendMessage("Ghost", "SetDirectionY", (Math.abs(DirectionY) > Math.abs(DY)) ? DirectionY : DY);
+    instance.SendMessage("Ghost", "SetKeySelect", (Math.abs(KeySelect) > Math.abs(KSelect)) ? KeySelect : KSelect);
+    instance.SendMessage("Ghost", "SetKeyBack", (Math.abs(KeyBack) > Math.abs(KBack)) ? KeyBack : KBack);
+    instance.SendMessage("Ghost", "SetKeyJump", (Math.abs(KeyJump) > Math.abs(KJump)) ? KeyJump : KJump);
+    pollGamepads();
+}
+
+    </script>
+    <style>
+* { margin: auto; text-align: center; overflow: hidden; font-family: sans-serif; }
+body { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; }
+.webgl-content { position: absolute; top: 0 left: 0; width: 100%; height: 100%; text-shadow: 1px 1px 10px white; }
+.unityContainer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.footer { position: absolute; top: 0; width: 100%; height: 30px; background-color: cyan; box-shadow: 1px 1px 10px black; opacity: 0.5; }
+.webgl-logo { position: relative; top: 0; left: 0; background-color: white; z-index: 9999; }
+.fullscreen { position: relative; top: 0; right: 0; }
+.title { position: relative; bottom: 0; font-weight: bold; }
+#unity-play-button { position: fixed; top: 0; left: 0; width: 100%; height: 100%; text-align: center; color: magenta; background: black; border: none; font-size: 100pt; user-select: none; z-index: 9999; }
+#unity-control-overlay { background: #00000000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9998; display: none; }
+#unity-control-left-thumb { background: #FFFFFF7F; position: fixed; top: calc(15vh - 5vmin); left: calc(10vw - 5vmin); width: 10vmin; height: 10vmin; border-radius: 100vmin; background: #FFFFFF7F; user-select: none; }
+#unity-control-right-thumb { background: #FFFFFF7F; position: fixed; top: calc(15vh - 5vmin); left: calc(90vw - 5vmin); width: 10vmin; height: 10vmin; border-radius: 100vmin; background: #FFFFFF7F; user-select: none; }
+#unity-control-left-stick { background: #0000007F; position: fixed; top: calc(15vh - 10vmin); left: calc(10vw - 10vmin); width: 20vmin; height: 20vmin; border-radius: 100vmin; border: 1px #FFFFFF3F solid; }
+#unity-control-right-stick { background: #0000007F; position: fixed; top: calc(15vh - 10vmin); left: calc(90vw - 10vmin); width: 20vmin; height: 20vmin; border-radius: 100vmin; border: 1px #FFFFFF3F solid; }
+#unity-control-key-select { background: #0000007F; position: fixed; top: calc(20vh - 10vmin); left: calc(75vw - 10vmin); width: 20vmin; height: 10vmin; border-radius: 25vmin; border: 1px #FFFFFF3F solid; font-size: 9vh; font-weight: bold; color: #FFFFFF7F; user-select: none; }
+#unity-control-key-back { background: #0000007F; position: fixed; top: calc(20vh - 10vmin); left: calc(25vw - 10vmin); width: 20vmin; height: 10vmin; border-radius: 25vmin; border: 1px #FFFFFF3F solid; font-size: 9vh; font-weight: bold; color: #FFFFFF7F; user-select: none; }
+#unity-control-key-jump { background: #0000007F; position: fixed; top: calc(20vh - 10vmin); left: calc(50vw - 10vmin); width: 20vmin; height: 10vmin; border-radius: 25vmin; border: 1px #FFFFFF3F solid; font-size: 9vh; font-weight: bold; color: #FFFFFF7F; user-select: none; }
+    </style>
+  </head>
+  <body>
+    <audio src="BlackwaterCityRemastered.mp3" loop paused></audio>
+    <button id="unity-play-button" onclick="play(this);">Play</button>
+    <div id="unity-container" class="unity-desktop">
+      <canvas id="unity-canvas" width="100%" height="100%"></canvas>
+      <canvas id="staging-canvas" hidden></canvas>
+      <div id="unity-control-overlay">
+        <div id="unity-control-left-thumb"></div>
+        <div id="unity-control-right-thumb"></div>
+        <div id="unity-control-left-stick"></div>
+        <div id="unity-control-right-stick"></div>
+        <div id="unity-control-key-back">&lt;</div>
+        <div id="unity-control-key-select">&gt;</div>
+        <div id="unity-control-key-jump">Λ</div>
+      </div>
+      <div id="unity-loading-bar">
+        <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
